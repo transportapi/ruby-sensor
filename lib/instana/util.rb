@@ -161,6 +161,24 @@ module Instana
         return '' unless given.match(/\A[a-z\d]{16,32}\z/i)
         given
       end
+
+      # Get the redis url from redis client
+      #
+      # @param client [String] the Redis client
+      #
+      # @return [String, nil]
+      #
+      def get_redis_url(client)
+        if client.respond_to?(:config) # redis-client
+          client.config.server_url
+        elsif client.respond_to?(:connection) # redis-rb
+          "#{client.connection[:host]}:#{client.connection[:port]}"
+        elsif client.respond_to?(:client) && client.client.respond_to?(:options) # hiredis
+          "#{client.client.options[:host]}:#{client.client.options[:port]}"
+        else
+          nil
+        end
+      end
     end
   end
 end
