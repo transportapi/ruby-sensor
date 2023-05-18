@@ -163,7 +163,7 @@ module Instana
       end
 
       # Get the redis url from redis client.
-      # In different versions of Sidekiq different redis clients are use, so getting the redis url should be
+      # In different versions of Sidekiq different redis clients are used, so getting the redis url should be
       # adapted to the client.
       # - Before version 5 Sidekiq used redis/hiredis
       # - In versions 5 and 6 Sidekiq used resque/redis-namespace
