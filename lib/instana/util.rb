@@ -169,11 +169,12 @@ module Instana
       # @return [String, nil]
       #
       def get_redis_url(client)
-        if client.respond_to?(:config) # redis-client
+        case
+        when client.respond_to?(:config) # redis-rb/redis-client Redis client
           client.config.server_url
-        elsif client.respond_to?(:connection) # redis-rb
+        when client.respond_to?(:connection) # redis/redis-rb Redis client
           "#{client.connection[:host]}:#{client.connection[:port]}"
-        elsif client.respond_to?(:client) && client.client.respond_to?(:options) # hiredis
+        when client.respond_to?(:client) && client.client.respond_to?(:options) # redis/hiredis Redis client
           "#{client.client.options[:host]}:#{client.client.options[:port]}"
         else
           nil
