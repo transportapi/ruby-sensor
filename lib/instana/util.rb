@@ -162,7 +162,12 @@ module Instana
         given
       end
 
-      # Get the redis url from redis client
+      # Get the redis url from redis client.
+      # In different versions of Sidekiq different redis clients are use, so getting the redis url should be
+      # adapted to the client.
+      # - Before version 5 Sidekiq used redis/hiredis
+      # - In versions 5 and 6 Sidekiq used resque/redis-namespace
+      # - Sidekiq 7 uses redis-rb/redis-client (https://github.com/sidekiq/sidekiq/blob/main/docs/7.0-Upgrade.md#redis-client)
       #
       # @param client [String] the Redis client
       #
@@ -172,7 +177,7 @@ module Instana
         case
         when client.respond_to?(:config) # redis-rb/redis-client Redis client
           client.config.server_url
-        when client.respond_to?(:connection) # redis/redis-rb Redis client
+        when client.respond_to?(:connection) # resque/redis-namespace (implemented with redis/redis-rb) Redis client
           "#{client.connection[:host]}:#{client.connection[:port]}"
         when client.respond_to?(:client) && client.client.respond_to?(:options) # redis/hiredis Redis client
           "#{client.client.options[:host]}:#{client.client.options[:port]}"
