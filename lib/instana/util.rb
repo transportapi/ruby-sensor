@@ -161,6 +161,30 @@ module Instana
         return '' unless given.match(/\A[a-z\d]{16,32}\z/i)
         given
       end
+
+      # Get the redis url from redis client.
+      # In different versions of Sidekiq different redis clients are used, so getting the redis url should be
+      # adapted to the client.
+      # - Before version 5 Sidekiq used redis/hiredis
+      # - In versions 5 and 6 Sidekiq used resque/redis-namespace
+      # - Sidekiq 7 uses redis-rb/redis-client (https://github.com/sidekiq/sidekiq/blob/main/docs/7.0-Upgrade.md#redis-client)
+      #
+      # @param client [String] the Redis client
+      #
+      # @return [String, nil]
+      #
+      def get_redis_url(client)
+        case
+        when client.respond_to?(:config) # redis-rb/redis-client Redis client
+          client.config.server_url
+        when client.respond_to?(:connection) # resque/redis-namespace (implemented with redis/redis-rb) Redis client
+          "#{client.connection[:host]}:#{client.connection[:port]}"
+        when client.respond_to?(:client) && client.client.respond_to?(:options) # redis/hiredis Redis client
+          "#{client.client.options[:host]}:#{client.client.options[:port]}"
+        else
+          nil
+        end
+      end
     end
   end
 end
