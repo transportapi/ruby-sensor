@@ -10,6 +10,18 @@ class TracerProviderTest < Minitest::Test
     @tracer_provider = Instana.tracer_provider
   end
 
+  def dropping_provider
+    ::Instana::Trace::TracerProvider.new(sampler: Instana::TestSupport.dropping_sampler)
+  end
+
+  def keeping_provider
+    ::Instana::Trace::TracerProvider.new(sampler: Instana::TestSupport.keeping_sampler)
+  end
+
+  def start_root(provider, name: :rack)
+    provider.internal_start_span(name, :internal, {}, [], Time.now, nil, nil)
+  end
+
   def test_tracer
     # This tests the global tracer is the same as tracer from tracer_provider
     assert_equal Instana.tracer, @tracer_provider.tracer("instana_tracer")
@@ -111,27 +123,46 @@ class TracerProviderTest < Minitest::Test
   end
 
   def test_internal_start_span_untraced
-    @tracer_provider = ::Instana::Trace::TracerProvider.new
-    Minitest::Mock.new
-    result = @tracer_provider.internal_start_span('test_span', 'kind', {}, [], Time.now, nil, @instrumentation_scope)
-    assert_instance_of(Instana::Span, result)
-    # Todo add proper testcase
+    # An untraced parent context yields a non-recording, level-0 Instana::Span.
+    untraced = OpenTelemetry::Common::Utilities.untraced
+    span = @tracer_provider.internal_start_span('test_span', :internal, {}, [], Time.now, untraced, nil)
+
+    assert_instance_of Instana::Span, span
+    refute span.recording?
+    assert_equal 0, span.context.level
+    assert_match(/-02\z/, span.context.trace_parent_header)
   end
 
-  def test_internal_start_span_traced
-    @tracer_provider = ::Instana::Trace::TracerProvider.new
-    Minitest::Mock.new
-    result = @tracer_provider.internal_start_span('test_span', 'kind', {}, [], Time.now, nil, @instrumentation_scope)
-    assert_instance_of(Instana::Span, result)
-    # Todo add proper testcase
+  def test_internal_start_span_dropped
+    span = start_root(dropping_provider)
+
+    assert_instance_of Instana::Span, span
+    refute span.recording?
+    assert_equal 0, span.context.level
+    assert_match(/-02\z/, span.context.trace_parent_header)
   end
 
-  def test_internal_start_span_stopped
-    @tracer_provider = ::Instana::Trace::TracerProvider.new
-    Minitest::Mock.new
-    result = @tracer_provider.internal_start_span('test_span', 'kind', {}, [], Time.now, nil, @instrumentation_scope)
-    assert_instance_of(Instana::Span, result)
-    # Todo add proper testcase
+  def test_internal_start_span_kept
+    span = start_root(keeping_provider)
+
+    assert_instance_of Instana::Span, span
+    assert span.recording?
+    assert_match(/-03\z/, span.context.trace_parent_header)
+  end
+
+  def test_internal_start_span_dropped_preserves_parent
+    provider = dropping_provider
+    parent = start_root(provider, name: :rack)
+    child = Instana::Trace.with_span(parent) { start_root(provider, name: :actioncontroller) }
+
+    assert_equal parent, child.instance_variable_get(:@parent)
+  end
+
+  def test_internal_start_span_when_stopped
+    provider = keeping_provider
+    provider.shutdown
+    span = start_root(provider)
+    refute span.recording? # stopped forces non-recording even though sampler keeps
   end
 end
 
