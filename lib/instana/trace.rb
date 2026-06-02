@@ -56,14 +56,23 @@ module Instana
       OpenTelemetry::Context.with_value(CURRENT_SPAN_KEY, span) { |c, s| yield s, c }
     end
 
-    # Wraps a SpanContext with an object implementing the Span interface. This is done in order
-    # to expose a SpanContext as a Span in operations such as in-process Span propagation.
+    # Wraps a SpanContext with an object implementing the Span interface.
+    #
+    # Returns a non-recording (pre-ended) Instana::Span rather than a bare
+    # OpenTelemetry::Trace::Span. A bare span breaks dropped-trace handling in two
+    # ways: (1) the OpenTracing-style log_entry/trace API builds a child via
+    # Span.new(name, current_span), but Span#initialize only accepts a parent that
+    # is_a?(Instana::Span) or is_a?(Instana::SpanContext) -- a bare span matches
+    # neither, so the child becomes a parentless root whose log_exit sets
+    # current_span to nil, severing context before outbound calls; (2) the bare span
+    # lacks name/parent. A pre-ended Instana::Span satisfies the parent check,
+    # carries @parent natively, reports recording? == false (recording? is !@ended),
+    # and never exports because Span#close short-circuits when @ended (see span.rb).
     #
     # @param [SpanContext] span_context SpanContext to be wrapped
-    #
     # @return [Span]
     def non_recording_span(span_context)
-      OpenTelemetry::Trace::Span.new(span_context: span_context)
+      Instana::Span.non_recording(span_context)
     end
   end
 end

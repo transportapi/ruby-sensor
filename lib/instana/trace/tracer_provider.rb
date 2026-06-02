@@ -144,14 +144,24 @@ module Instana
 
         if OpenTelemetry::Common::Utilities.untraced?(parent_context)
           span_id = parent_span_id || @id_generator.generate_span_id
-          return OpenTelemetry::Trace.non_recording_span(OpenTelemetry::Trace::SpanContext.new(trace_id: trace_id, span_id: span_id))
+          # Normalise the untraced span to a level-0 Instana::SpanContext (instead of a
+          # bare OTel SpanContext) so downstream gem code can call Instana-specific
+          # methods (level/active?/trace_parent_header) on it, and preserve the parent
+          # so the current_span chain walks correctly on log_exit/finish.
+          return build_dropped_span(trace_id: trace_id, span_id: span_id, tracestate: nil, parent_span: parent_span)
         end
 
-        result = @sampler.should_sample?(trace_id: trace_id, parent_context: parent_context, links: links, name: name, kind: kind, attributes: attributes)
+        result = @sampler.should_sample?(
+          trace_id: trace_id, parent_context: parent_context, links: links, name: name, kind: kind,
+          attributes: attributes
+        )
         span_id ||= @id_generator.generate_span_id
-        if !@stopped && result.recording? && !@stopped
-          trace_flags = result.sampled? ? OpenTelemetry::Trace::TraceFlags::SAMPLED : OpenTelemetry::Trace::TraceFlags::DEFAULT
-          context = Instana::SpanContext.new(trace_id: trace_id, span_id: span_id, trace_flags: trace_flags, tracestate: result.tracestate)
+        if !@stopped && result.recording?
+          trace_flags =
+            result.sampled? ? OpenTelemetry::Trace::TraceFlags::SAMPLED : OpenTelemetry::Trace::TraceFlags::DEFAULT
+          context = Instana::SpanContext.new(
+            trace_id: trace_id, span_id: span_id, trace_flags: trace_flags, tracestate: result.tracestate
+          )
           attributes = attributes&.merge(result.attributes) || result.attributes.dup
           Instana::Span.new(
             name,
@@ -169,7 +179,12 @@ module Instana
             instrumentation_scope
           )
         else
-          Instana::Trace.non_recording_span(Instana::Trace::SpanContext.new(trace_id: trace_id, span_id: span_id, tracestate: result.tracestate)) # Todo add tracestate so that the trcing doesnot happen for this span # rubocop:disable Layout/LineLength
+          # Sampler dropped this span. Build a non-recording, level-0 span that carries
+          # its parent, so the trace propagates sampled=0 downstream rather than
+          # severing context and producing orphan traces.
+          build_dropped_span(
+            trace_id: trace_id, span_id: span_id, tracestate: result.tracestate, parent_span: parent_span
+          )
         end
       end
 
@@ -192,6 +207,19 @@ module Instana
 
       def timeout_timestamp
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      end
+
+      # Builds a non-recording span for a dropped/untraced trace: an Instana::SpanContext
+      # forced to level 0 (so trace_parent_header emits sampled=0), wrapped in a
+      # non-recording span whose @parent is preserved for correct current_span unwinding.
+      # @parent is guarded with is_a?(Instana::Span) to mirror Span#initialize and avoid
+      # storing OpenTelemetry::Trace::Span::INVALID (returned by current_span when no
+      # span is active), which would break the chain invariant.
+      def build_dropped_span(trace_id:, span_id:, tracestate:, parent_span:)
+        context = Instana::SpanContext.new(trace_id: trace_id, span_id: span_id, level: 0, tracestate: tracestate)
+        span = Instana::Trace.non_recording_span(context)
+        span.instance_variable_set(:@parent, parent_span) if parent_span.is_a?(Instana::Span)
+        span
       end
     end
   end

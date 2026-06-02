@@ -3,7 +3,7 @@
 
 require 'test_helper'
 
-class SpanTest < Minitest::Test
+class SpanTest < Minitest::Test # rubocop:disable Metrics/ClassLength
   def test_getters_setters
     span = Instana::Span.new(:test)
 
@@ -401,5 +401,44 @@ class SpanTest < Minitest::Test
     refute_equal first_stack, span[:stack], "Stack trace should be updated with second error"
   ensure
     Instana.config[:back_trace][:stack_trace_level] = "error"
+  end
+
+  # --- non_recording_span returns a pre-ended Instana::Span ---------
+
+  def test_non_recording_span_is_not_recording
+    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
+    refute Instana::Span.non_recording(ctx).recording?
+  end
+
+  def test_non_recording_span_preserves_context
+    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
+    assert_same ctx, Instana::Span.non_recording(ctx).context
+  end
+
+  def test_non_recording_returns_nameless_span
+    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
+    assert_nil Instana::Span.non_recording(ctx).name
+  end
+
+  def test_non_recording_span_add_attributes_does_not_raise
+    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
+    Instana::Span.non_recording(ctx).add_attributes(foo: 'bar')
+  end
+
+  # --- Span#close short-circuits on an already-ended span -----------
+
+  def test_pre_ended_span_does_not_export_on_close
+    clear_all!
+    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
+    span = Instana::Span.non_recording(ctx)
+    assert_same span, span.close
+    assert_equal 0, Instana.processor.span_metrics[:closed]
+  end
+
+  def test_recording_span_still_exports_on_close
+    clear_all!
+    span = Instana::Span.new(:rack)
+    span.close
+    assert_equal 1, Instana.processor.span_metrics[:closed]
   end
 end

@@ -163,6 +163,12 @@ module Instana
     # @return [Span]
     #
     def close(end_time = ::Instana::Util.now_in_ms)
+      # A non-recording span (built by Instana::Trace.non_recording_span) is created
+      # pre-ended (@ended = true). Without this guard, close would queue it for
+      # export to the agent, counting dropped spans against the Fair Use Policy and
+      # defeating head sampling. Skip any span that is already ended.
+      return self if @ended
+
       result = ::Instana::SpanFiltering.filter_span(self)
       if end_time.is_a?(Time)
         end_time = ::Instana::Util.time_to_ms(end_time)
@@ -175,6 +181,17 @@ module Instana
         ::Instana.processor.on_finish(self)
       end
       self
+    end
+
+    # Builds a pre-ended span used to represent a non-recording (dropped or
+    # untraced) trace. See class doc / non_recording_span at Instana::Trace for
+    # full rationale.
+    def self.non_recording(span_context)
+      span = allocate
+      span.instance_variable_set(:@ended, true)
+      span.instance_variable_set(:@context, span_context)
+      span.instance_variable_set(:@attributes, { data: { sdk: {} }, ts: 0 })
+      span
     end
 
     #############################################################

@@ -360,4 +360,13 @@ class TracerTest < Minitest::Test
       Instana::Tracer.invalid
     end
   end
+
+  def test_non_recording_span_delegates_to_span
+    ctx = Instana::SpanContext.new(trace_id: 'abc', span_id: 'def', level: 0)
+    span = Instana::Trace.non_recording_span(ctx)
+
+    assert_instance_of Instana::Span, span
+    refute span.recording?
+    assert_same ctx, span.context
+  end
 end
