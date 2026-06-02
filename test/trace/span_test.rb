@@ -405,29 +405,24 @@ class SpanTest < Minitest::Test # rubocop:disable Metrics/ClassLength
 
   # --- non_recording_span returns a pre-ended Instana::Span ---------
 
-  def test_non_recording_span_returns_instana_span
-    ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    assert_instance_of Instana::Span, Instana::Trace.non_recording_span(ctx)
-  end
-
   def test_non_recording_span_is_not_recording
     ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    refute Instana::Trace.non_recording_span(ctx).recording?
+    refute Instana::Span.non_recording(ctx).recording?
   end
 
   def test_non_recording_span_preserves_context
     ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    assert_same ctx, Instana::Trace.non_recording_span(ctx).context
+    assert_same ctx, Instana::Span.non_recording(ctx).context
   end
 
-  def test_non_recording_span_name_does_not_raise
+  def test_non_recording_returns_nameless_span
     ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    assert_nil Instana::Trace.non_recording_span(ctx).name
+    assert_nil Instana::Span.non_recording(ctx).name
   end
 
   def test_non_recording_span_add_attributes_does_not_raise
     ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    Instana::Trace.non_recording_span(ctx).add_attributes(foo: 'bar')
+    Instana::Span.non_recording(ctx).add_attributes(foo: 'bar')
   end
 
   # --- Span#close short-circuits on an already-ended span -----------
@@ -435,7 +430,7 @@ class SpanTest < Minitest::Test # rubocop:disable Metrics/ClassLength
   def test_pre_ended_span_does_not_export_on_close
     clear_all!
     ctx = Instana::SpanContext.new(trace_id: 'abc123', span_id: 'def456', level: 0)
-    span = Instana::Trace.non_recording_span(ctx)
+    span = Instana::Span.non_recording(ctx)
     assert_same span, span.close
     assert_equal 0, Instana.processor.span_metrics[:closed]
   end

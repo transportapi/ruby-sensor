@@ -72,16 +72,7 @@ module Instana
     # @param [SpanContext] span_context SpanContext to be wrapped
     # @return [Span]
     def non_recording_span(span_context)
-      span = Instana::Span.allocate
-      span.instance_variable_set(:@ended, true)
-      span.instance_variable_set(:@context, span_context)
-      # Seed the nested attribute structure the gem assumes exists: Span#name reads
-      # @attributes[:data][:sdk][:name] and set_tag (via add_attributes) writes under
-      # @attributes[:data][:sdk]. allocate skips initialize, so without this seed
-      # those raise NoMethodError. :ts is seeded because close computes
-      # end_time - @attributes[:ts] (harmless here since close short-circuits on @ended).
-      span.instance_variable_set(:@attributes, { data: { sdk: {} }, ts: 0 })
-      span
+      Instana::Span.non_recording(span_context)
     end
   end
 end

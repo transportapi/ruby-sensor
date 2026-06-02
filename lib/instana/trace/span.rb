@@ -183,6 +183,17 @@ module Instana
       self
     end
 
+    # Builds a pre-ended span used to represent a non-recording (dropped or
+    # untraced) trace. See class doc / non_recording_span at Instana::Trace for
+    # full rationale.
+    def self.non_recording(span_context)
+      span = allocate
+      span.instance_variable_set(:@ended, true)
+      span.instance_variable_set(:@context, span_context)
+      span.instance_variable_set(:@attributes, { data: { sdk: {} }, ts: 0 })
+      span
+    end
+
     #############################################################
     # Accessors
     #############################################################

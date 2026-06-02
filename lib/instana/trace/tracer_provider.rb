@@ -212,10 +212,13 @@ module Instana
       # Builds a non-recording span for a dropped/untraced trace: an Instana::SpanContext
       # forced to level 0 (so trace_parent_header emits sampled=0), wrapped in a
       # non-recording span whose @parent is preserved for correct current_span unwinding.
+      # @parent is guarded with is_a?(Instana::Span) to mirror Span#initialize and avoid
+      # storing OpenTelemetry::Trace::Span::INVALID (returned by current_span when no
+      # span is active), which would break the chain invariant.
       def build_dropped_span(trace_id:, span_id:, tracestate:, parent_span:)
         context = Instana::SpanContext.new(trace_id: trace_id, span_id: span_id, level: 0, tracestate: tracestate)
         span = Instana::Trace.non_recording_span(context)
-        span.instance_variable_set(:@parent, parent_span) if parent_span
+        span.instance_variable_set(:@parent, parent_span) if parent_span.is_a?(Instana::Span)
         span
       end
     end

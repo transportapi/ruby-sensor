@@ -130,7 +130,7 @@ class TracerProviderTest < Minitest::Test
     assert_instance_of Instana::Span, span
     refute span.recording?
     assert_equal 0, span.context.level
-    assert_match(/-02\z/, span.context.trace_parent_header)
+    assert_match(/-02\z/, span.context.trace_parent_header) # W3C traceparent flags: 02 = not sampled
   end
 
   def test_internal_start_span_dropped
@@ -139,7 +139,7 @@ class TracerProviderTest < Minitest::Test
     assert_instance_of Instana::Span, span
     refute span.recording?
     assert_equal 0, span.context.level
-    assert_match(/-02\z/, span.context.trace_parent_header)
+    assert_match(/-02\z/, span.context.trace_parent_header) # W3C traceparent flags: 02 = not sampled
   end
 
   def test_internal_start_span_kept
@@ -147,7 +147,7 @@ class TracerProviderTest < Minitest::Test
 
     assert_instance_of Instana::Span, span
     assert span.recording?
-    assert_match(/-03\z/, span.context.trace_parent_header)
+    assert_match(/-03\z/, span.context.trace_parent_header) # W3C traceparent flags: 03 = sampled
   end
 
   def test_internal_start_span_dropped_preserves_parent
@@ -158,10 +158,17 @@ class TracerProviderTest < Minitest::Test
     assert_equal parent, child.instance_variable_get(:@parent)
   end
 
+  def test_internal_start_span_dropped_root_has_nil_parent
+    span = start_root(dropping_provider)
+    assert_nil span.instance_variable_get(:@parent)
+  end
+
   def test_internal_start_span_when_stopped
     provider = keeping_provider
     provider.shutdown
     span = start_root(provider)
+    assert_instance_of Instana::Span, span
+
     refute span.recording? # stopped forces non-recording even though sampler keeps
   end
 end
