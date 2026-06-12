@@ -23,7 +23,7 @@ module Instana
 
       current_span = ::Instana.tracer.start_span(:rack, attributes: {}, with_parent: parent_context)
       trace_ctx = OpenTelemetry::Trace.context_with_span(current_span)
-      @trace_token = OpenTelemetry::Context.attach(trace_ctx)
+      trace_token = OpenTelemetry::Context.attach(trace_ctx)
       status, headers, response = @app.call(env)
 
       trace_context = process_span_tags(req, current_span, kvs, status, env) if ::Instana.tracer.tracing?
@@ -33,7 +33,7 @@ module Instana
       current_span.record_exception(e) if ::Instana.tracer.tracing?
       raise
     ensure
-      finalize_trace(current_span, kvs, headers, trace_context)
+      finalize_trace(current_span, kvs, headers, trace_context, trace_token)
     end
 
     private
@@ -120,17 +120,14 @@ module Instana
       end
     end
 
-    def finalize_trace(current_span, kvs, headers, trace_context)
+    def finalize_trace(current_span, kvs, headers, trace_context, trace_token)
       if ::Instana.tracer.tracing?
         set_response_headers(headers, trace_context) if headers
         current_span.add_attributes(kvs)
         current_span.finish
       end
     ensure
-      if @trace_token
-        OpenTelemetry::Context.detach(@trace_token)
-        @trace_token = nil
-      end
+      OpenTelemetry::Context.detach(trace_token) if trace_token
     end
 
     def set_response_headers(headers, trace_context)
