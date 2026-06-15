@@ -39,13 +39,17 @@ class RackContextLeakTest < Minitest::Test
     ::Instana.tracer.current_span = nil
   end
 
+  def test_finalize_trace_skips_detach_when_token_is_nil
+    OpenTelemetry::Context.stub(:detach, ->(_) { flunk "detach must not be called" }) do
+      @middleware.send(:finalize_trace, nil, {}, {}, nil, nil)
+    end
+  end
+
   def test_concurrent_calls_do_not_share_token
     attached = Queue.new
     detached = Queue.new
-    call_count = 0
 
     app = lambda { |_env|
-      call_count += 1
       sleep 0.05 # widen the race window
       [200, {}, ['ok']]
     }
